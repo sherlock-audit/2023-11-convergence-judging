@@ -3,7 +3,7 @@
 Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/94 
 
 ## Found by 
-0xDetermination, ZanyBonzy, bitsurfer, bughuntoor
+0xDetermination, ZanyBonzy, bitsurfer, bughuntoor, hash
 ## Summary
 Similar issues were found by users [0xDetermination](https://github.com/code-423n4/2023-08-verwa-findings/issues/386) and [bart1e](https://github.com/code-423n4/2023-08-verwa-findings/issues/206) in the Canto veRWA audit, which uses a similar gauge controller type.
 ## Vulnerability Detail
@@ -77,6 +77,86 @@ Therefore, in conclusion, we must consider your issue as valid.
 
 Regards,
 Convergence Team
+
+**CergyK**
+
+Escalate
+
+The severity of this issue is low for two reasons:
+
+- Admin endpoint, the admin can be trusted to not use this feature lightly, and take preventative measures to ensure that accounting is not disrupted, such as ensuring that there is no current votes for a gauge and locking voting to set a weight.
+
+- _change_gauge_weight has this exact implementation in the battle-tested curve dao contract (in usage for more than 3 years now without notable issue):
+https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/GaugeController.vy
+
+
+**sherlock-admin2**
+
+ > Escalate
+> 
+> The severity of this issue is low for two reasons:
+> 
+> - Admin endpoint, the admin can be trusted to not use this feature lightly, and take preventative measures to ensure that accounting is not disrupted, such as ensuring that there is no current votes for a gauge and locking voting to set a weight.
+> 
+> - _change_gauge_weight has this exact implementation in the battle-tested curve dao contract (in usage for more than 3 years now without notable issue):
+> https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/GaugeController.vy
+> 
+
+You've created a valid escalation!
+
+To remove the escalation from consideration: Delete your comment.
+
+You may delete or edit your escalation comment anytime before the 48-hour escalation window closes. After that, the escalation becomes final.
+
+**0xDetermination**
+
+Addressing the escalation points:
+1. If there are no current votes for a gauge, the weight can't be lowered. Also, locking voting is not really relevant for this issue. I don't think there are any preventative measures that can be taken other than never lowering the gauge weight.
+2. This function is in the live Curve contract, but it has never been called (see https://etherscan.io/advanced-filter?fadd=0x2f50d538606fa9edd2b11e2446beb18c9d5846bb&tadd=0x2f50d538606fa9edd2b11e2446beb18c9d5846bb&mtd=0xd4d2646e%7eChange_gauge_weight)
+
+**nevillehuang**
+
+I think all issues regarding killing and changing weight for gauges (#18, #94, #122,#192), all the arguments are assuming the following:
+
+1. The admin would perform appropriate measures before executing admin gated functions - To me, this is not clear cut like the way admin input would be. From sponsor confirmation, you would understand that they did not understand the severity of performing such issues so it wouldn't be unreasonable to say they are not aware enough to perform such preventive measures before this functions are called. If not, I think this should have been explicitly mentioned in known design considerations in the contest details and/or the contract details [here](https://github.com/sherlock-audit/2023-11-convergence/blob/e894be3e36614a385cf409dc7e278d5b8f16d6f2/sherlock-cvg/technical-docs/lock/GaugeController.md#lock-all-gauges-vote), where the purpose of locking and pausing votes are stated.
+
+2. Afaik, when @CergyK mentions the admin can take preventive measures such as ensuring no current vote and locking votes, then what would happen during a scenario when the current gauge that an admin wants to change weight or kill gauge (e.g. malicious token) has votes assigned. Wouldn't that essentially mean admin can never do so, and therefore breaks core functionality?
+
+3. The admin would never call `change_gauge_weight` because it has never been called in a live curve contract - This is pure speculation, just because curve doesn't call it, it does not mean convergence would never call it.
+
+
+**Czar102**
+
+See my comment [here](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/192#issuecomment-1889099971).
+
+Planning to reject the escalation.
+
+**nevillehuang**
+
+@0xDetermination @deadrosesxyz @10xhash
+
+Do you think this is a duplicate of #192 because they seem similar. I am unsure if fixing one issue will fix another, given at the point of contest, it is intended to invoke both functions.
+
+**0xDetermination**
+
+@nevillehuang I think any issue with a root cause of 'lowering gauge weight' should be considered the same if I understand the duplication rules correctly. So it seems like these are all dupes.
+
+**Czar102**
+
+As long as an issue is valid and the root cause is the same, they are currently considered duplicates. Both #192 and #94 have a root cause of not handling the slope in `_change_gauge_weight`, despite having different impacts.
+
+**Czar102**
+
+Result:
+High
+Has duplicates
+
+**sherlock-admin2**
+
+Escalations have been resolved successfully!
+
+Escalation status:
+- [CergyK](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/94/#issuecomment-1869547286): rejected
 
 # Issue H-2: LockingPositionDelegate::manageOwnedAndDelegated unchecked duplicate tokenId allow metaGovernance manipulation 
 
@@ -201,72 +281,7 @@ We will add a check on the values contained in the 3 arrays to ensure duplicates
 Regards,
 Convergence Team
 
-# Issue H-3: LockPositionDelegate doesn't clear delegates on transfer which can be used to honeypot buyers 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/175 
-
-## Found by 
-0x52, HChang26, Inspex, bughuntoor
-## Summary
-
-When transferring locked positions, the delegates are not cleared from the previous owner. This can be used to honeypot buyers. A malicious user would list their token which a large TDE claim available. They can then frontrun the legitimate user with a call setting themselves as the ysCVG delegate. Then after they can claim the TDE at the expense of the new owner who paid extra for the token since it was entitled to a TDE claim.
-
-## Vulnerability Detail
-
-[LockingPositionDelegate.sol#L237-L240](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L237-L240)
-
-    function delegateYsCvg(uint256 _tokenId, address _to) external onlyTokenOwner(_tokenId) {
-        delegatedYsCvg[_tokenId] = _to;
-        emit DelegateShare(_tokenId, _to);
-    }
-
-delegateYsCvg allows the owner of the token to set the receiver of yield sharing. It is also the only function that sets the delegatedYsCvg mapping. LockingPositionManager uses the standard implementation of transfers which never clears out this delegation when the token is transferred. As a result of this, all delegation will persist across transfers. This enables the honeypot scenario described above. 
-
-## Impact
-
-Users can be honeypotted by malicious token sellers
-
-## Code Snippet
-
-[SdtStakingPositionManager.sol#L21](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Staking/StakeDAO/SdtStakingPositionManager.sol#L21)
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-
-Overwrite the afterTokenTransfer method to forcefully clear delegation when a token is transferred
-
-
-
-## Discussion
-
-**shalbe-cvg**
-
-Hello,
-
-Thanks a lot for your attention.
-
-After an in-depth review, we have to consider your issue as Confirmed.
-You're right, after transferring (whether it's a purchase on a marketplace or a simple transfer) we should ensure that all delegatees associated to the token are removed. Otherwise, as you said, buyer (i.e. receiver) might not be aware of the delegatees and could be subject to a honeypot attack.
-
-However we have decided to disagree with the severity and put it as a Medium issue.
-
-Regards,
-Convergence Team
-
-**nevillehuang**
-
-Hi @0xR3vert @shalbe-cvg @walk-on-me,
-
-I think this could remain as high severity given explicit TDE claim can be hijacked. Why do you think this constitutes medium severity?
-
-**nevillehuang**
-
-Keeping this as high severity given delegate logic allows malicious user to perform the honeypot without any external limitations.
-
-# Issue H-4: Tokens that are both bribes and StakeDao gauge rewards will cause loss of funds 
+# Issue H-3: Tokens that are both bribes and StakeDao gauge rewards will cause loss of funds 
 
 Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/182 
 
@@ -386,7 +401,548 @@ Therefore, in conclusion, we must consider your issue as a valid.
 Regards,
 Convergence Team
 
-# Issue H-5: Division difference can result in a revert when claiming treasury yield and excess rewards to some users 
+# Issue M-1: Division by Zero in CvgRewards::_distributeCvgRewards leads to locked funds 
+
+Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/131 
+
+## Found by 
+cergyk
+## Summary
+
+The bug occurs when `CvgRewards::_setTotalWeight` sets `totalWeightLocked` to zero, leading to a division by zero error in 
+`CvgRewards::_distributeCvgRewards`, and blocking cycle increments. The blocking results in all Cvg locked to be unlockable permanently.
+
+## Vulnerability Detail
+
+The function `_distributeCvgRewards` of `CvgRewards.sol` is designed to calculate and distribute CVG rewards among staking contracts. It calculates the `cvgDistributed` for each gauge based on its weight and the total staking inflation. However, if the `totalWeightLocked` remains at zero (due to some gauges that are available but no user has voted for any gauge), the code attempts to divide by zero.
+
+The DoS of `_distributeCvgRewards` will prevent cycle from advancing to the next state `State.CONTROL_TOWER_SYNC`, thus forever locking the users’ locked CVG tokens.
+
+## Impact
+
+Loss of users’ CVG tokens due to DoS of `_distributeCvgRewards` blocking the state.
+
+## Code Snippet
+
+```solidity
+    function _setTotalWeight() internal {
+        ...
+❌      totalWeightLocked += _gaugeController.get_gauge_weight_sum(_getGaugeChunk(_cursor, _endChunk)); //@audit `totalWeightLocked` can be set to 0 if no gauge has received any vote
+        ...
+    }
+
+```
+
+```solidity
+    function _distributeCvgRewards() internal {
+        ...
+        uint256 _totalWeight = totalWeightLocked;
+        ...
+        for (uint256 i; i < gaugeWeights.length; ) {
+            /// @dev compute the amount of CVG to distribute in the gauge
+❌          cvgDistributed = (stakingInflation * gaugeWeights[i]) / _totalWeight; //@audit will revert if `_totalWeight` is zero
+        ...
+
+```
+
+```solidity
+/**
+* @notice Unlock CVG tokens under the NFT Locking Position : Burn the NFT, Transfer back the CVG to the user.  Rewards from YsDistributor must be claimed before or they will be lost.    * @dev The locking time must be over
+* @param tokenId to burn
+*/
+function burnPosition(uint256 tokenId) external {
+...
+❌      require(_cvgControlTower.cvgCycle() > lastEndCycle, "LOCKED"); //@audit funds are locked if current `cycle <= lastEndCycle`
+...
+    }
+```
+
+https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L321
+
+## Tool used
+
+## Recommendation
+If the _totalWeight is zero, just consider the cvg rewards to be zero for that cycle, and continue with other logic:
+
+```diff
+-cvgDistributed = (stakingInflation * gaugeWeights[i]) / _totalWeight; 
++cvgDistributed = _totalWeight == 0 ? 0 : (stakingInflation * gaugeWeights[i]) / _totalWeight;
+```
+
+
+
+## Discussion
+
+**0xR3vert**
+
+Hello,
+
+Thanks a lot for your attention.
+
+We are aware of the potential for a division by zero if there are no votes at all in one of our gauges. However, this scenario is unlikely to occur in reality because there will always be votes deployed (by us and/or others) in the gauges. Nevertheless, your point is valid, and we will address it to be prepared for this case.
+
+Therefore, in conclusion, we must acknowledge your issue as correct, even though we are already aware of it.
+
+Regards,
+Convergence Team
+
+**nevillehuang**
+
+Since DoS is not permanent where in as long as protocol/users themselves vote for the gauge, I think this is a low severity issue.
+
+**CergyK**
+
+Escalate
+
+Escalating based on latest comment:
+> Since DoS is not permanent where in as long as protocol/users themselves vote for the gauge, I think this is a low severity issue.
+
+If we reach this case (`totalWeights == 0`), the DoS is permanent. There would be no other way to reset this variable, and all user funds would be locked permanently.
+
+It is acknowledged that there is a low chance of this happening, but due to the severe impact and acknowledged validity this should be a medium 
+
+**sherlock-admin2**
+
+ > Escalate
+> 
+> Escalating based on latest comment:
+> > Since DoS is not permanent where in as long as protocol/users themselves vote for the gauge, I think this is a low severity issue.
+> 
+> If we reach this case (`totalWeights == 0`), the DoS is permanent. There would be no other way to reset this variable, and all user funds would be locked permanently.
+> 
+> It is acknowledged that there is a low chance of this happening, but due to the severe impact and acknowledged validity this should be a medium 
+
+You've created a valid escalation!
+
+To remove the escalation from consideration: Delete your comment.
+
+You may delete or edit your escalation comment anytime before the 48-hour escalation window closes. After that, the escalation becomes final.
+
+**nevillehuang**
+
+@CergyK As mentioned by the sponsor, they will always ensure there is votes present to prevent this scenario, so I can see this as an "admin error" if the scenario is allowed to happen, but I also see your point given this was not made known to watsons. If totalWeight  goes to zero, it will indeed be irrecoverable.
+
+Unlikely but possible, so can be valid based on this sherlock [rule](https://docs.sherlock.xyz/audits/judging/judging#v.-how-to-identify-a-medium-issue)
+
+> Causes a loss of funds but requires certain external conditions or specific states.
+
+**Czar102**
+
+I believe this impact warrants medium severity. Planning to accept the escalation.
+
+**Czar102**
+
+Result:
+Medium
+Unique
+
+
+**sherlock-admin2**
+
+Escalations have been resolved successfully!
+
+Escalation status:
+- [CergyK](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/131/#issuecomment-1869562974): accepted
+
+# Issue M-2: LockPositionService::increaseLockTime Incorrect Calculation Extends Lock Duration Beyond Intended Period 
+
+Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/136 
+
+## Found by 
+bughuntoor, cergyk, jah, rvierdiiev
+## Summary
+`LockPositionService::increaseLockTime` uses `block.timestamp` for locking tokens, resulting in potential over-extension of the lock period. Specifically, if a user locks tokens near the end of a cycle, the lock duration might extend an additional week more than intended. For instance, locking for one cycle at the end of cycle N could result in an unlock time at the end of cycle N+2, instead of at the start of cycle N+2.
+
+This means that all the while specifying that their $CVG should be locked for the next cycle, the $CVG stays locked for two cycles.
+
+## Vulnerability Detail
+The function `increaseLockTime` inaccurately calculates the lock duration by using `block.timestamp`, thus not aligned to the starts of cycles. This discrepancy leads to a longer-than-expected lock period, especially when a lock is initiated near the end of a cycle. This misalignment means that users are unintentionally extending their lock period and affecting their asset management strategies.
+
+### Scenario:
+- Alice decides to lock her tokens for one cycle near the end of cycle N.
+- The lock duration calculation extends the lock to the end of cycle N+2, rather than starting the unlock process at the start of cycle N+2.
+- Alice's tokens are locked for an additional week beyond her expectation.
+
+## Impact
+
+## Code Snippet
+https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionService.sol#L421
+
+## Tool used
+Users may have their $CVG locked for a week more than expected
+
+## Recommendation
+Align the locking mechanism to multiples of a week and use `(block.timestamp % WEEK) + lockDuration` for the lock time calculation. This adjustment ensures that the lock duration is consistent with user expectations and cycle durations.
+
+# Issue M-3: Delegation Limitation in Voting Power Management 
+
+Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/142 
+
+## Found by 
+lil.eth, pontifex, ydlee
+## Summary
+
+MgCVG Voting power delegation system is constrained by 2 hard limits, first on the number of tokens delegated to one user (`maxTokenIdsDelegated = 25`) and second on the number of delegatees for one token ( `maxMgDelegatees = 5`). Once this limit is reached for a token, the token owner cannot modify the delegation percentage to an existing delegated user. This inflexibility can prevent efficient and dynamic management of delegated voting power.
+
+## Vulnerability Detail
+Observe these lines : 
+```solidity
+function delegateMgCvg(uint256 _tokenId, address _to, uint96 _percentage) external onlyTokenOwner(_tokenId) {
+    require(_percentage <= 100, "INVALID_PERCENTAGE");
+
+    uint256 _delegateesLength = delegatedMgCvg[_tokenId].length;
+    require(_delegateesLength < maxMgDelegatees, "TOO_MUCH_DELEGATEES");
+
+    uint256 tokenIdsDelegated = mgCvgDelegatees[_to].length;
+    require(tokenIdsDelegated < maxTokenIdsDelegated, "TOO_MUCH_MG_TOKEN_ID_DELEGATED");
+```
+if either `maxMgDelegatees` or `maxTokenIdsDelegated` are reached,  delegation is no longer possible.
+The problem is the fact that this function can be either used to delegate or to update percentage of delegation or also to remove a delegation but in cases where we already delegated to a maximum of users (`maxMgDelegatees`) OR the user to who we delegated has reached the maximum number of tokens that can be delegated to him/her (`maxTokenIdsDelegated`), an update or a removal of delegation is no longer possible.
+
+6 scenarios are possible : 
+1. `maxTokenIdsDelegated` is set to 5, Alice is the third to delegate her voting power to Bob and choose to delegate 10% to him. Bob gets 2 other people delegating their tokens to him, Alice wants to increase the power delegated to Bob to 50% but she cannot due to Bob reaching `maxTokenIdsDelegated`
+2. `maxTokenIdsDelegated` is set to 25, Alice is the 10th to delegate her voting power to Bob and choose to delegate 10%, DAO decrease `maxTokenIdsDelegated` to 3, Alice wants to increase the power delegated to Bob to 50%, but she cannot due to this
+3. `maxTokenIdsDelegated` is set to 5, Alice is the third to delegate her voting power to Bob and choose to delegate 90%. Bob gets 2 other people delegating their tokens to him, Alice wants to only remove the power delegated to Bob using this function, but she cannot due to this
+4. `maxMgDelegatees` is set to 3, Alice delegates her voting power to Bob,Charly and Donald by 20% each, Alice reaches `maxMgDelegatees` and she cannot update her voting power for any of Bob,Charly or Donald
+5. `maxMgDelegatees` is set to 5, Alice delegates her voting power to Bob,Charly and Donald by 20% each,DAO decreases`maxMgDelegatees` to 3. Alice cannot update or remove her voting power delegated to any of Bob,Charly and Donald
+6. `maxMgDelegatees` is set to 3, Alice delegates her voting power to Bob,Charly and Donald by 20% each, Alice wants to only remove her delegation to Bob but she reached `maxMgDelegatees` so she cannot only remove her delegation to Bob
+
+A function is provided to remove all user to who we delegated but this function cannot be used as a solution to this problem due to 2 things : 
+- It's clearly not intended to do an update of voting power percentage by first removing all delegation we did because `delegateMgCvg()` is clearly defined to allow to delegate OR to remove one delegation OR to update percentage of delegation but in some cases it's impossible which is not acceptable
+- if Alice wants to update it's percentage delegated to Bob , she would have to remove all her delegatees and would take the risk that someone is faster than her and delegate to Bob before her, making Bob reaches `maxTokenIdsDelegated` and would render impossible for Alice to re-delegate to Bob
+
+### POC
+You can add it to test/ut/delegation/balance-delegation.spec.ts : 
+```Typescript
+it("maxTokenIdsDelegated is reached => Cannot update percentage of delegate", async function () {
+        (await lockingPositionDelegate.maxTokenIdsDelegated()).should.be.equal(25);
+        await lockingPositionDelegate.connect(treasuryDao).setMaxTokenIdsDelegated(3);
+        (await lockingPositionDelegate.maxTokenIdsDelegated()).should.be.equal(3);
+
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user10, 20);
+        await lockingPositionDelegate.connect(user2).delegateMgCvg(2, user10, 30);
+        await lockingPositionDelegate.connect(user3).delegateMgCvg(3, user10, 30);
+        
+        const txFail = lockingPositionDelegate.connect(user1).delegateMgCvg(1, user10, 40);
+        await expect(txFail).to.be.revertedWith("TOO_MUCH_MG_TOKEN_ID_DELEGATED");
+    });
+    it("maxTokenIdsDelegated IS DECREASED => PERCENTAGE UPDATE IS NO LONGER POSSIBLE", async function () {
+        await lockingPositionDelegate.connect(treasuryDao).setMaxTokenIdsDelegated(25);
+        (await lockingPositionDelegate.maxTokenIdsDelegated()).should.be.equal(25);
+
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user10, 20);
+        await lockingPositionDelegate.connect(user2).delegateMgCvg(2, user10, 30);
+        await lockingPositionDelegate.connect(user3).delegateMgCvg(3, user10, 30);
+
+        await lockingPositionDelegate.connect(treasuryDao).setMaxTokenIdsDelegated(3);
+        (await lockingPositionDelegate.maxTokenIdsDelegated()).should.be.equal(3);        
+
+        const txFail = lockingPositionDelegate.connect(user1).delegateMgCvg(1, user10, 40);
+        await expect(txFail).to.be.revertedWith("TOO_MUCH_MG_TOKEN_ID_DELEGATED");
+        await lockingPositionDelegate.connect(treasuryDao).setMaxTokenIdsDelegated(25);
+        (await lockingPositionDelegate.maxTokenIdsDelegated()).should.be.equal(25);
+    });
+    it("maxMgDelegatees : TRY TO UPDATE PERCENTAGE DELEGATED TO A USER IF WE ALREADY REACH maxMgDelegatees", async function () {
+        await lockingPositionDelegate.connect(treasuryDao).setMaxMgDelegatees(3);
+        (await lockingPositionDelegate.maxMgDelegatees()).should.be.equal(3);
+
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user10, 20);
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user2, 30);
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user3, 30);
+
+        const txFail = lockingPositionDelegate.connect(user1).delegateMgCvg(1, user10, 40);
+        await expect(txFail).to.be.revertedWith("TOO_MUCH_DELEGATEES");
+    });
+    it("maxMgDelegatees : maxMgDelegatees IS DECREASED => PERCENTAGE UPDATE IS NO LONGER POSSIBLE", async function () {
+        await lockingPositionDelegate.connect(treasuryDao).setMaxMgDelegatees(5);
+        (await lockingPositionDelegate.maxMgDelegatees()).should.be.equal(5);
+
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user10, 20);
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user2, 30);
+        await lockingPositionDelegate.connect(user1).delegateMgCvg(1, user3, 10);
+
+        await lockingPositionDelegate.connect(treasuryDao).setMaxMgDelegatees(2);
+        (await lockingPositionDelegate.maxMgDelegatees()).should.be.equal(2);
+
+        const txFail2 = lockingPositionDelegate.connect(user1).delegateMgCvg(1, user2, 50);
+        await expect(txFail2).to.be.revertedWith("TOO_MUCH_DELEGATEES");
+    });
+```
+## Impact
+In some cases it is impossible to update percentage delegated or to remove only one delegated percentage then forcing users to remove all their voting power delegatations, taking the risk that someone is faster then them to delegate to their old delegated users and reach threshold for delegation, making impossible for them to re-delegate
+
+## Code Snippet
+
+https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L278
+
+## Tool used
+
+Manual Review
+
+## Recommendation
+
+Separate functions for new delegations and updates : Implement logic that differentiates between adding a new delegatee and updating an existing delegation to allow updates to existing delegations even if the maximum number of delegatees is reached
+
+
+
+## Discussion
+
+**shalbe-cvg**
+
+Hello,
+
+Thanks a lot for your attention.
+
+After an in-depth review, we have to consider your issue as Invalid.
+We have developed a function allowing users to clean their `mgDelegatees` and `veDelegatees`. Therefore there is no need to divide this delegation function into two different ones (add / update).
+
+Regards,
+Convergence Team
+
+**nevillehuang**
+
+Hi @0xR3vert @shalbe-cvg @walk-on-me,
+
+Could point me to the existing function you are pointing to that is present during the time of the audit? 
+
+**shalbe-cvg**
+
+> Hi @0xR3vert @shalbe-cvg @walk-on-me,
+> 
+> Could point me to the existing function you are pointing to that is present during the time of the audit?
+
+Hello, this is the function `cleanDelegatees` inside LockingPositionDelegate contract
+
+**nevillehuang**
+
+Agree with sponsor, since `cleanDelegatees()` and `removeTokenIdDelegated()` [here](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L376-L402) allow removal of delegatees one-by-one, this seems to be a non-issue.
+
+**ChechetkinVV**
+
+Escalate
+
+> Agree with sponsor, since `cleanDelegatees()` and `removeTokenIdDelegated()` [here](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L376-L402) allow removal of delegatees one-by-one, this seems to be a non-issue.
+
+The `cleanDelegatees` function referred to by the sponsor allows the owner of the token to completely remove delegation from ALL mgDelegates, but it will not be possible to remove delegation from ONE delegate using this function. This is obvious from the [`_cleanMgDelegatees`](https://github.com/sherlock-audit/2023-11-convergence/blob/e894be3e36614a385cf409dc7e278d5b8f16d6f2/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L445-L460)  function which is called from the [`cleanDelegatees`](https://github.com/sherlock-audit/2023-11-convergence/blob/e894be3e36614a385cf409dc7e278d5b8f16d6f2/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L400) function. 
+
+The only way for the owner to remove delegation from ONE delegate is using the `delegateMgCvg` function. But this becomes impossible if the delegate from whom the owner is trying to remove delegation has reached the maximum number of delegations.
+
+Perhaps recommendations from https://github.com/sherlock-audit/2023-11-convergence-judging/issues/202 and https://github.com/sherlock-audit/2023-11-convergence-judging/issues/206 reports will help to better understand this problem.
+
+This problem is described in this report and in https://github.com/sherlock-audit/2023-11-convergence-judging/issues/202,  https://github.com/sherlock-audit/2023-11-convergence-judging/issues/206 reports. Other reports describe different problems. They are hardly duplicates of this issue.
+
+**sherlock-admin2**
+
+ > Escalate
+> 
+> > Agree with sponsor, since `cleanDelegatees()` and `removeTokenIdDelegated()` [here](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L376-L402) allow removal of delegatees one-by-one, this seems to be a non-issue.
+> 
+> The `cleanDelegatees` function referred to by the sponsor allows the owner of the token to completely remove delegation from ALL mgDelegates, but it will not be possible to remove delegation from ONE delegate using this function. This is obvious from the [`_cleanMgDelegatees`](https://github.com/sherlock-audit/2023-11-convergence/blob/e894be3e36614a385cf409dc7e278d5b8f16d6f2/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L445-L460)  function which is called from the [`cleanDelegatees`](https://github.com/sherlock-audit/2023-11-convergence/blob/e894be3e36614a385cf409dc7e278d5b8f16d6f2/sherlock-cvg/contracts/Locking/LockingPositionDelegate.sol#L400) function. 
+> 
+> The only way for the owner to remove delegation from ONE delegate is using the `delegateMgCvg` function. But this becomes impossible if the delegate from whom the owner is trying to remove delegation has reached the maximum number of delegations.
+> 
+> Perhaps recommendations from https://github.com/sherlock-audit/2023-11-convergence-judging/issues/202 and https://github.com/sherlock-audit/2023-11-convergence-judging/issues/206 reports will help to better understand this problem.
+> 
+> This problem is described in this report and in https://github.com/sherlock-audit/2023-11-convergence-judging/issues/202,  https://github.com/sherlock-audit/2023-11-convergence-judging/issues/206 reports. Other reports describe different problems. They are hardly duplicates of this issue.
+
+You've created a valid escalation!
+
+To remove the escalation from consideration: Delete your comment.
+
+You may delete or edit your escalation comment anytime before the 48-hour escalation window closes. After that, the escalation becomes final.
+
+**nevillehuang**
+
+@shalbe-cvg @walk-on-me @0xR3vert @ChechetkinVV 
+
+I think I agree with watsons in the sense that it seems not intended to remove all delegations once max delegation number is reached just to adjust voting power or to remove a single delegatee, for both mgCVG and veCVG. 
+
+I think what the watsons are mentioning is that this would then open up a scenario of potential front-running for delegatees themselves to permanently always have max delegated mgCVG or veCVG, so it would permanently DoS the original delegator from updating/removing delegatee. 
+
+**Czar102**
+
+From my understanding, this issue presents an issue of breaking core functionality (despite the contracts working according to the design, core intended functionality is impacted).
+
+I believe this is sufficient to warrant medium severity for the issue.
+
+@nevillehuang which issues should and which shouldn't be duplicated with this one? Do you agree with the escalation?
+
+**nevillehuang**
+
+@Czar102, As I understand, there are two current impacts
+
+1. Cannot clean delegates one by one, but forced to clean all delegates when `maxMgDelegatees` or `maxTokenIdsDelegated`
+2. Frontrunning to force DOS on delegator performing delegation removal from a delegator to invoke the max delegation check 
+
+This is what I think are duplicates:
+
+1. 142 (this issue mentions both impacts), 202, 206
+2. 40, 51, 142 (again this issue mentions both impacts), 169
+
+Both impact arises from the `maxMgDelegatees`/`maxTokenIdsDelegated` check thats why I originally grouped them all together. While I initially disagreed, on further review I agree with escalation since this is not the intended contract functionality intended by the protocol. For impact 2, based on your previous comments [here](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/165#issuecomment-1884638007), it seems like it is low severity.
+
+**Czar102**
+
+Thank you for the summary @nevillehuang. I'm planning to consider all other issues (apart from #142, #202, #206) low, hence they will not be considered duplicates anymore (see [docs](https://docs.sherlock.xyz/audits/judging/judging#ix.-duplication-rules)). The three issues describing a Medium severity impact will be considered duplicates and be rewarded.
+
+**Czar102**
+
+Result:
+Medium
+Has duplicates
+
+
+**sherlock-admin2**
+
+Escalations have been resolved successfully!
+
+Escalation status:
+- [ChechetkinVV](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/142/#issuecomment-1869103996): accepted
+
+# Issue M-4: cvgControlTower and veCVG lock timing will be different and lead to yield loss scenarios 
+
+Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/178 
+
+## Found by 
+0x52, 0xAlix2, bughuntoor, cergyk, hash
+## Summary
+
+When creating a locked CVG position, there are two more or less independent locks that are created. The first is in lockingPositionService and the other is in veCVG. LockingPositionService operates on cycles (which are not finite length) while veCVG always rounds down to the absolute nearest week. The disparity between these two accounting mechanism leads to conflicting scenario that the lock on LockingPositionService can be expired while the lock on veCVG isn't (and vice versa). Additionally tokens with expired locks on LockingPositionService cannot be extended. The result is that the token is expired but can't be withdrawn. The result of this is that the expired token must wait to be unstaked and then restaked, cause loss of user yield and voting power while the token is DOS'd.
+
+## Vulnerability Detail
+
+Cycles operate using block.timestamp when setting lastUpdateTime on the new cycle in [L345](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L345). It also requires that at least 7 days has passed since this update to roll the cycle forward in [L205](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L205). The result is that the cycle can never be exactly 7 days long and the start/end of the cycle will constantly fluctuate. 
+
+Meanwhile when veCVG is calculating the unlock time it uses the week rounded down as shown in [L328](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L328). 
+
+We can demonstrate with an example:
+
+Assume the first CVG cycle is started at block.timestamp == 1,000,000. This means our first cycle ends at 1,604,800. A user deposits for a single cycle at 1,400,000. A lock is created for cycle 2 which will unlock at 2,209,600. 
+
+The lock on veCVG does not match this though. Instead it's calculation will yield:
+
+    (1,400,000 + 2 * 604,800) / 604,800 = 4
+
+    4 * 604,800 = 2,419,200
+
+As seen these are mismatched and the token won't be withdrawable until much after it should be due to the check in veCVG [L404](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L404).
+
+This DOS will prevent the expired lock from being unstaked and restaked which causes loss of yield.
+
+The opposite issue can also occur. For each cycle that is slightly longer than expected the veCVG lock will become further and further behind the cycle lock on lockingPositionService. This can also cause a dos and yield loss because it could prevent user from extending valid locks due to the checks in [L367](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L367) of veCVG.
+
+An example of this:
+
+Assume a user locks for 96 weeks (58,060,800). Over the course of that year, it takes an average of 2 hours between the end of each cycle and when the cycle is rolled over. This effectively extends our cycle time from 604,800 to 612,000 (+7200). Now after 95 cycles, the user attempts to increase their lock duration. veCVG and lockingPositionService will now be completely out of sync:
+
+After 95 cycles the current time would be:
+
+    612,000 * 95 = 58,140,000
+
+Whereas veCVG lock ended:
+
+    612,000 * 96 = 58,060,800
+
+According to veCVG the position was unlocked at 58,060,800 and therefore increasing the lock time will revert due to [L367](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L367)
+
+The result is another DOS that will cause the user loss of yield. During this time the user would also be excluded from taking place in any votes since their veCVG lock is expired.
+
+## Impact
+
+Unlock DOS that cause loss of yield to the user
+
+## Code Snippet
+
+[CvgRewards.sol#L341-L349](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L341-L349)
+
+## Tool used
+
+Manual Review
+
+## Recommendation
+
+I would recommend against using block.timestamp for CVG cycles, instead using an absolute measurement like veCVG uses.
+
+# Issue M-5: SdtRewardReceiver#_withdrawRewards has incorrect slippage protection and withdraws can be sandwiched 
+
+Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/180 
+
+## Found by 
+0x52, 0xkaden, Bauer, CL001, FarmerRick, caventa, cducrest-brainbot, detectiveking, hash, lemonmon, r0ck3tz
+## Summary
+
+The _min_dy parameter of poolCvgSDT.exchange is set via the poolCvgSDT.get_dy method. The problem with this is that get_dy is a relative output that is executed at runtime. This means that no matter the state of the pool, this slippage check will never work.
+
+## Vulnerability Detail
+
+[SdtRewardReceiver.sol#L229-L236](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Staking/StakeDAO/SdtRewardReceiver.sol#L229-L236)
+
+            if (isMint) {
+                /// @dev Mint cvgSdt 1:1 via CvgToke contract
+                cvgSdt.mint(receiver, rewardAmount);
+            } else {
+                ICrvPoolPlain _poolCvgSDT = poolCvgSDT;
+                /// @dev Only swap if the returned amount in CvgSdt is gretear than the amount rewarded in SDT
+                _poolCvgSDT.exchange(0, 1, rewardAmount, _poolCvgSDT.get_dy(0, 1, rewardAmount), receiver);
+            }
+
+When swapping from SDT to cvgSDT, get_dy is used to set _min_dy inside exchange. The issue is that get_dy is the CURRENT amount that would be received when swapping as shown below:
+
+    @view
+    @external
+    def get_dy(i: int128, j: int128, dx: uint256) -> uint256:
+        """
+        @notice Calculate the current output dy given input dx
+        @dev Index values can be found via the `coins` public getter method
+        @param i Index value for the coin to send
+        @param j Index valie of the coin to recieve
+        @param dx Amount of `i` being exchanged
+        @return Amount of `j` predicted
+        """
+        rates: uint256[N_COINS] = self.rate_multipliers
+        xp: uint256[N_COINS] = self._xp_mem(rates, self.balances)
+    
+        x: uint256 = xp[i] + (dx * rates[i] / PRECISION)
+        y: uint256 = self.get_y(i, j, x, xp, 0, 0)
+        dy: uint256 = xp[j] - y - 1
+        fee: uint256 = self.fee * dy / FEE_DENOMINATOR
+        return (dy - fee) * PRECISION / rates[j]
+
+The return value is EXACTLY the result of a regular swap, which is where the problem is. There is no way that the exchange call can ever revert. Assume the user is swapping because the current exchange ratio is 1:1.5. Now assume their withdraw is sandwich attacked. The ratio is change to 1:0.5 which is much lower than expected. When get_dy is called it will simulate the swap and return a ratio of 1:0.5. This in turn doesn't protect the user at all and their swap will execute at the poor price.
+
+## Impact
+
+SDT rewards will be sandwiched and can lose the entire balance
+
+## Code Snippet
+
+[SdtRewardReceiver.sol#L213-L245](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Staking/StakeDAO/SdtRewardReceiver.sol#L213-L245)
+
+## Tool used
+
+Manual Review
+
+## Recommendation
+
+Allow the user to set _min_dy directly so they can guarantee they get the amount they want
+
+
+
+## Discussion
+
+**shalbe-cvg**
+
+Hello,
+
+Thanks a lot for your attention.
+
+After an in-depth review, we have to consider your issue as Confirmed.
+Not only users can get sandwiched but in most cases this exchange directly on the pool level would rarely succeed as `get_dy` returns the exact amount the user could get. We will add a slippage that users will setup.
+
+Regards,
+Convergence Team
+
+# Issue M-6: Division difference can result in a revert when claiming treasury yield and excess rewards to some users 
 
 Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/190 
 
@@ -484,945 +1040,114 @@ We'll correct this by computing the same way the ysTotal & ysPartial on the bala
 
 Very nice finding, it'd break the claim for the last users to claim.
 
-# Issue H-6: Killing a gague can lead to bricking of the protocol 
+**deadrosesxyz**
 
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/192 
+Escalate
+The amounts are scaled up by 1e18. The rounding down problem comes when dividing by `MAX_PERCENTAGE` which equals 100. Worst case scenario (which will only happen if a user deposits an amount which is not divisible by 100), there will be rounding down of up to 99 wei. Not only it is insignificant, it is unlikely to happen as it requires a deposit of an amount not divisible by 1e2.
+Believe issue should be marked as low.
 
-## Found by 
-Inspex, bughuntoor, hash
-## Summary
-Slopes are not handled correctly when a gauge is killed. This can cause incorrect accounting for `sum` and `total` weights and lead to bricking the protocol in certain scenarios.
+**sherlock-admin2**
 
-## Vulnerability Detail
-Points are accounted using `bias`,`slope` and `slope end time`. The bias is gradually decreased by its slope eventually reaching 0 at the `slope end time / lock end time`. In case the bias is suddenly reduced without handling/removing its slope, there will reach a time before the `slope end time` where the bias will drop below 0. 
-`points_sum` uses points to calculate the sum of individual gauge weights of a particular type at any time. The above case of bias dropping below 0 is handled as follows in `_get_sum`:
-```solidity
-            d_bias: uint256 = pt.slope * WEEK
-            if pt.bias > d_bias:
-                pt.bias -= d_bias
-                d_slope: uint256 = self.changes_sum[gauge_type][t]
-                pt.slope -= d_slope
-            else:
-                pt.bias = 0
-                pt.slope = 0
-```
-Whenever bias drops below 0 the slope is also made 0 without removing the `slope end accounting` in `changes_sum`. Afterwards, if a scenario occurs where the pt.bias regains a value greater than the `pt.slope * WEEK`, the true part of the if condition executes which can cause it to revert if at any point `self.changes_sum[gauge_type][t]` is greater than the current `pt.slope`.
+ > Escalate
+> The amounts are scaled up by 1e18. The rounding down problem comes when dividing by `MAX_PERCENTAGE` which equals 100. Worst case scenario (which will only happen if a user deposits an amount which is not divisible by 100), there will be rounding down of up to 99 wei. Not only it is insignificant, it is unlikely to happen as it requires a deposit of an amount not divisible by 1e2.
+> Believe issue should be marked as low.
 
-The sudden drop in `points_sum` bias can happen due to the following:
-1. killing of a gauge
-2. admin calls `change_gauge_weight` with a lower value than current
+You've created a valid escalation!
 
-From this moment the accounting of `points_sum` is broken and depending on the current `slope`, `changes_sum`, `bias` and activity following this, the `points_sum.bias` can go to 0 ( an attacker wanting to cause grief has the option to accelarate the dropping of bias to 0 by front-running a kill and increasing its slope )
+To remove the escalation from consideration: Delete your comment.
 
-Once bias goes to 0, it can regain a value greater than the `pt.slope * WEEK` due to the following:
+You may delete or edit your escalation comment anytime before the 48-hour escalation window closes. After that, the escalation becomes final.
 
-1. another gauge of the same type is added later with a weight
-2. a user votes for a gauge of the same type
-3. admin calling the `change_gauge_weight` increasing a gauge's weight
+**10xhash**
 
-Scenario 2 is almost sure to happen following which all calls to `_get_sum` can revert which will cause the protocol to brick since even the cycle update involves a call to `_get_sum`
+1. The rounding down is significant because it disallows the last claimers of a TDE cycle from obtaining their reward.
+2. An attacker can perform the attack which requires no expectations from the other users.
+3. The reasoning to classify non 1e2 amounts as unlikely would be the neatness part and the UI interacting users. There is a functionality provided by the CvgUtilities contract itself to lock Cvg using swap and bond tokens which shouldn't be discriminating non 1e2 amounts.
 
-### POC
-```solidity
-Gauges A and B are of same type
+**deadrosesxyz**
 
-At t = 0
-a_bias = b_bias = 100 , a_slope = b_slope = 1 , slope_end : t = 100 
-sum_bias = 200 , sum_slope = 2 , slope_end : t = 100
-
-At t = 50 before kill
-a_bias = b_bias = 50 , a_slope = b_slope = 1 
-sum_bias = 100 , sum_slope = 2
-
-at t = 50 kill A
-a_bias = 0 , a_slope = 1
-b_bias = 50 , b_slope = 1
-sum_bias = 50 , sum_slope = 2
-
-at t = 75
-b_bias = 25 , b_slope = 1
-sum_bias = 0 , sum_slope = 0 (pt.slope set to 0 when bias !> d.slope)
-
-at t = 75
-another user votes for B with bias = 100 and slope = 1
-b_bias = 125 , b_slope = 2
-sum_bias = 100 , sum_slope = 1
-
-at t = 100
-sum_slope -= 2 ( a_slope_end = b_slope_end : t = 100)
-
-this will cause _get_sum to revert
-```
-
-Runnable foundry test gist link:
-https://gist.github.com/10xhash/b65867b99841a88e078e34f094fc0554
-
-## Impact
-Bricking of the protocol,locked user funds , incorrect `sum` and `total` weight values
-
-## Code Snippet
-`_change_gauge_weight` sets weight directly without handling slope
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/GaugeController.vy#L568-L582
-
-`kill_gauge` calls `_change_gauge_weight`
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/GaugeController.vy#L603C5-L609
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-When killing the gauge, decrease its slope from the sum and iterate over all future weeks till the max limit and remove any gauge-associated-slope changes from the `changes_sum`. Handle the user removing a vote from a killed gauge seperately from the general vote function.
-
-
-
-## Discussion
-
-**0xR3vert**
-
-Hello,
-
-Thanks a lot for your attention.
-
-Thank you for your insightful observation. Upon thorough examination, we acknowledge that such an occurrence could indeed jeopardize the protocol. We are currently exploring multiple solutions to address this issue.
-We are considering removing the function change_gauge_weight entirely and not distributing CVG inflation on killed gauges, similar to how Curve Protocol handles their gauges.
-
-Therefore, in conclusion, we must consider your issue as valid.
-
-Regards,
-Convergence Team
-
-# Issue M-1: If the multiple calls to `writeStakingRewards` cross a week's end, it will result in unfair distribution of rewards 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/10 
-
-## Found by 
-bughuntoor, hash
-## Summary
-If the multiple calls to `writeStakingRewards` cross a week's end, it will result in unfair distribution of rewards
-
-## Vulnerability Detail
-The first call to `writeStakingRewards` calls `checkpoints` which makes sure all gauges are checkpointed up to the current week. However, there rises a issue if after `_checkpoints` the week end is crossed. This would allow for not up-to-date values of the gauges to be used. If the values are already added to the `totalWeightLocked`, its value will be inflated (as the gauge weights can only decrease in the time as votes are locked and time passes). 
-```solidity
-    function _setTotalWeight() internal {
-        ICvgControlTower _cvgControlTower = cvgControlTower;
-        IGaugeController _gaugeController = _cvgControlTower.gaugeController();
-        uint128 _cursor = cursor;
-        uint128 _totalGaugeNumber = uint128(gauges.length);
-
-        /// @dev compute the theoric end of the chunk
-        uint128 _maxEnd = _cursor + cvgRewardsConfig.maxLoopSetTotalWeight;
-        /// @dev compute the real end of the chunk regarding the length of staking contracts
-        uint128 _endChunk = _maxEnd < _totalGaugeNumber ? _maxEnd : _totalGaugeNumber;
-
-        /// @dev if last chunk of the total weighted locked processs
-        if (_endChunk == _totalGaugeNumber) {
-            /// @dev reset the cursor to 0 for _distributeRewards
-            cursor = 0;
-            /// @dev set the step as DISTRIBUTE for reward distribution
-            state = State.DISTRIBUTE;
-        } else {
-            /// @dev setup the cursor at the index start for the next chunk
-            cursor = _endChunk;
-        }
-
-        totalWeightLocked += _gaugeController.get_gauge_weight_sum(_getGaugeChunk(_cursor, _endChunk));
-
-        /// @dev emit the event only at the last chunk
-        if (_endChunk == _totalGaugeNumber) {
-            emit SetTotalWeight(_cvgControlTower.cvgCycle(), totalWeightLocked);
-        }
-    }
-```
-
-Then if any gauges have manually been checkpointed before the subsequent call to `_distributeCvgRewards` , it would mean that the sum of all weights of the gauges will be less than `totalWeightLocked`, meaning there will be underdistribution of rewards. If no gauges have been manually checkpointed, it would simply mean unfair distribution of rewards (as the values are not up-to-date).
-```solidity
-    function _distributeCvgRewards() internal {
-        ICvgControlTower _cvgControlTower = cvgControlTower;
-        IGaugeController gaugeController = _cvgControlTower.gaugeController();
-
-        uint256 _cvgCycle = _cvgControlTower.cvgCycle();
-
-        /// @dev number of gauge in GaugeController
-        uint128 _totalGaugeNumber = uint128(gauges.length);
-        uint128 _cursor = cursor;
-
-        uint256 _totalWeight = totalWeightLocked;
-        /// @dev cursor of the end of the actual chunk
-        uint128 cursorEnd = _cursor + cvgRewardsConfig.maxChunkDistribute;
-
-        /// @dev if the new cursor is higher than the number of gauge, cursor become the number of gauge
-        if (cursorEnd > _totalGaugeNumber) {
-            cursorEnd = _totalGaugeNumber;
-        }
-
-        /// @dev reset the cursor if the distribution has been done
-        if (cursorEnd == _totalGaugeNumber) {
-            cursor = 0;
-
-            /// @dev reset the total weight of the gauge
-            totalWeightLocked = 0;
-
-            /// @dev update the states to the control_tower sync
-            state = State.CONTROL_TOWER_SYNC;
-        }
-        /// @dev update the global cursor in order to be taken into account on next chunk
-        else {
-            cursor = cursorEnd;
-        }
-
-        uint256 stakingInflation = stakingInflationAtCycle(_cvgCycle);
-        uint256 cvgDistributed;
-        InflationInfo[] memory inflationInfos = new InflationInfo[](cursorEnd - _cursor);
-        address[] memory addresses = _getGaugeChunk(_cursor, cursorEnd);
-        /// @dev fetch weight of gauge relative to the cursor
-        uint256[] memory gaugeWeights = gaugeController.get_gauge_weights(addresses);
-        for (uint256 i; i < gaugeWeights.length; ) {
-            /// @dev compute the amount of CVG to distribute in the gauge
-            cvgDistributed = (stakingInflation * gaugeWeights[i]) / _totalWeight;
-
-            /// @dev Write the amount of CVG to distribute in the staking contract
-            ICvgAssetStaking(addresses[i]).processStakersRewards(cvgDistributed);
-
-            inflationInfos[i] = InflationInfo({
-                gauge: addresses[i],
-                cvgDistributed: cvgDistributed,
-                gaugeWeight: gaugeWeights[i]
-            });
-
-            unchecked {
-                ++i;
-            }
-        }
-
-        emit EventChunkWriteStakingRewards(_cvgCycle, _totalWeight, inflationInfos);
-    }
-```
-
-
-Note: since the requirement on calling `checkpoint` is that at least 7 days have passed since the last distribution, it would mean that the delta of the checkpoint and the end of the week will gradually decrease every week, up until we once have a distribution crossing over a week's end. The issue above is bound to happen given long-enough timeframe., 
-
-## Impact
-Unfair distribution of rewards. Possible permanent loss of rewards.
-
-## Code Snippet
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L279C1-L338C6
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-Add time constraints to `writeStakingRewards` in order to make sure it does not happen close to the end of the week 
-
-
-
-## Discussion
-
-**walk-on-me**
-
-Hello, 
-
-Thanks a lot for your attention.
-
-After a deep review of the issues, we have to consider all of your issues as valid.
-
-We indeed noticed that if we don't synchronize our CvgCycle with the WEEKS, we could have some issues of desynchronization in the long term if the CVG cycle is not triggered immediatly after 1 week.
-
-For example :
--   https://github.com/sherlock-audit/2023-11-convergence-judging/issues/10 && https://github.com/sherlock-audit/2023-11-convergence-judging/issues/193, mention that if the distribution of $CVG occurs just before a WEEK and finished just after, some gauges will have less CVG distributed.
--   https://github.com/sherlock-audit/2023-11-convergence-judging/issues/14, mention that some user can get some free mgCVG for 1 WEEK less than other users
--   https://github.com/sherlock-audit/2023-11-convergence-judging/issues/101, mention that in the last cycle of a lock, an user cannot extend his lock during the time between the last WEEK and the nextCvgCycle. 
--   https://github.com/sherlock-audit/2023-11-convergence-judging/issues/136 && https://github.com/sherlock-audit/2023-11-convergence-judging/issues/215, mention that in the last cycle of a lock, an user is locked for 1 more cycle than he planned
--   https://github.com/sherlock-audit/2023-11-convergence-judging/issues/178  , mention that extending a lock can be impossible
--   https://github.com/sherlock-audit/2023-11-convergence-judging/issues/59  , mention that during the mint of a position, the lock is done for one extra cycle on the veCVG
-
-We are going to implement the solution for all of these issues that is to round our CVGCycle on the WEEK like veCVG is doing.
-Regards,
-Convergence Team
-
-# Issue M-2: `mgCvg` balances are wrongfully calculated 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/14 
-
-## Found by 
-bughuntoor
-## Summary
-Users with significant difference in their locks may have the same `mgCVG` voting power 
-
-## Vulnerability Detail
-The `mgCvgCreated` is based on the amount a user has used for voting and their `lockDuration`. However, due to rounding down within the VotingEscrow contract, same users may get unfairly rewarded in comparison to others. 
-Let's look at the code responsible for the `mgCvgCreated` amount within `mintPosition`
-```solidity
-        if (ysPercentage != MAX_PERCENTAGE) {
-            uint256 amountVote = amount * (MAX_PERCENTAGE - ysPercentage);
-
-            /** @dev Timestamp of the end of locking. */
-            _cvgControlTower.votingPowerEscrow().create_lock(
-                tokenId,
-                amountVote / MAX_PERCENTAGE,
-                block.timestamp + (lockDuration + 1) * 7 days
-            );
-            /// @dev compute the amount of mgCvg
-            _mgCvgCreated = (amountVote * lockDuration) / (MAX_LOCK * MAX_PERCENTAGE);
-
-            /// @dev Automatically add the veCVG and mgCVG in the balance taken from Snapshot.
-            if (isAddToManagedTokens) {
-                _cvgControlTower.lockingPositionDelegate().addTokenAtMint(tokenId, receiver);
-            }
-        }
-```
-As we know, the voting escrow contract round downs the lock time to the nearest week. However, this is not accounted for when calculating the `mgCvgCreated`. The amount is entirely based on the `lockDuration`. 
-Consider the following scenario: 
-If two users with equal stake both call `mintPosition` with the same `lockDuration` of (let's say) 2 weeks), but one calls it at the beginning of the week and the other one calls it at the end of the week. Because of the rounding down to the nearest week, one of the users will have locked their tokens for ~2 weeks, while the other one will have locked them for ~1 week. However, both users will receive the same amount of `mgCvg`. This is unfair for both users.
-
-## Impact
-Unfair calculation of `mgCvg`
-
-## Code Snippet
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionService.sol#L266C1-L282C10
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-Base the `mgCvg` calculated on the block.timestamp
-
-# Issue M-3: Certain functions should not be usable when `GaugeController` is locked. 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/18 
-
-## Found by 
-bughuntoor
-## Summary
-Possible unfair over/under distribution of rewards
-
-## Vulnerability Detail
-When `writeStakingRewards` is invoked for the first time it calls `_checkpoints` which sets the lock in the GaugeController to true. What this does is it doesn't allow for any new vote changes. The idea behind it is that until the rewards are fully distributed there are no changes in the gauges' weights so the distribution of rewards is correct. 
-However, there are multiple unrestricted functions which can alter the outcome of the rewards and result in not only unfair distribution, but also to many overdistributed or underdistributed rewards.
-```solidity
-    function _setTotalWeight() internal {
-        ICvgControlTower _cvgControlTower = cvgControlTower;
-        IGaugeController _gaugeController = _cvgControlTower.gaugeController();
-        uint128 _cursor = cursor;
-        uint128 _totalGaugeNumber = uint128(gauges.length);
-
-        /// @dev compute the theoric end of the chunk
-        uint128 _maxEnd = _cursor + cvgRewardsConfig.maxLoopSetTotalWeight;
-        /// @dev compute the real end of the chunk regarding the length of staking contracts
-        uint128 _endChunk = _maxEnd < _totalGaugeNumber ? _maxEnd : _totalGaugeNumber;
-
-        /// @dev if last chunk of the total weighted locked processs
-        if (_endChunk == _totalGaugeNumber) {
-            /// @dev reset the cursor to 0 for _distributeRewards
-            cursor = 0;
-            /// @dev set the step as DISTRIBUTE for reward distribution
-            state = State.DISTRIBUTE;
-        } else {
-            /// @dev setup the cursor at the index start for the next chunk
-            cursor = _endChunk;
-        }
-
-        totalWeightLocked += _gaugeController.get_gauge_weight_sum(_getGaugeChunk(_cursor, _endChunk));
-
-        /// @dev emit the event only at the last chunk
-        if (_endChunk == _totalGaugeNumber) {
-            emit SetTotalWeight(_cvgControlTower.cvgCycle(), totalWeightLocked);
-        }
-    }
-```
-
-If any of `change_gauge_weight` `change_type_weight` or  is called after the `totalWeightLocked` is calculated, it will result in incorrect distribution of rewards. When `_distributeCvgRewards` is called, some gauges may not have the same value that has been used to calculate the `totalWeightLocked` and this may result in distribution too many or too little rewards. It also gives an unfair advantage/disadvantage to the different gauges. 
-```solidity
-    function _distributeCvgRewards() internal {
-        ICvgControlTower _cvgControlTower = cvgControlTower;
-        IGaugeController gaugeController = _cvgControlTower.gaugeController();
-
-        uint256 _cvgCycle = _cvgControlTower.cvgCycle();
-
-        /// @dev number of gauge in GaugeController
-        uint128 _totalGaugeNumber = uint128(gauges.length);
-        uint128 _cursor = cursor;
-
-        uint256 _totalWeight = totalWeightLocked;
-        /// @dev cursor of the end of the actual chunk
-        uint128 cursorEnd = _cursor + cvgRewardsConfig.maxChunkDistribute;
-
-        /// @dev if the new cursor is higher than the number of gauge, cursor become the number of gauge
-        if (cursorEnd > _totalGaugeNumber) {
-            cursorEnd = _totalGaugeNumber;
-        }
-
-        /// @dev reset the cursor if the distribution has been done
-        if (cursorEnd == _totalGaugeNumber) {
-            cursor = 0;
-
-            /// @dev reset the total weight of the gauge
-            totalWeightLocked = 0;
-
-            /// @dev update the states to the control_tower sync
-            state = State.CONTROL_TOWER_SYNC;
-        }
-        /// @dev update the global cursor in order to be taken into account on next chunk
-        else {
-            cursor = cursorEnd;
-        }
-
-        uint256 stakingInflation = stakingInflationAtCycle(_cvgCycle);
-        uint256 cvgDistributed;
-        InflationInfo[] memory inflationInfos = new InflationInfo[](cursorEnd - _cursor);
-        address[] memory addresses = _getGaugeChunk(_cursor, cursorEnd);
-        /// @dev fetch weight of gauge relative to the cursor
-        uint256[] memory gaugeWeights = gaugeController.get_gauge_weights(addresses);
-        for (uint256 i; i < gaugeWeights.length; ) {
-            /// @dev compute the amount of CVG to distribute in the gauge
-            cvgDistributed = (stakingInflation * gaugeWeights[i]) / _totalWeight;
-
-            /// @dev Write the amount of CVG to distribute in the staking contract
-            ICvgAssetStaking(addresses[i]).processStakersRewards(cvgDistributed);
-
-            inflationInfos[i] = InflationInfo({
-                gauge: addresses[i],
-                cvgDistributed: cvgDistributed,
-                gaugeWeight: gaugeWeights[i]
-            });
-
-            unchecked {
-                ++i;
-            }
-        }
-
-        emit EventChunkWriteStakingRewards(_cvgCycle, _totalWeight, inflationInfos);
-    }
-```
-
-
-## Impact
-Unfair distribution of rewards. Over/underdistributing rewards.
-
-## Code Snippet
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L244C1-L272C6
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-Add a lock to `change_gauge_weight` `change_type_weight` 
-
-
-
-## Discussion
-
-**0xR3vert**
-
-Hello,
-
-Thanks a lot for your attention.
-
-Absolutely, if we kill a gauge or change a type weight during the distribution, it would distribute wrong amounts, even though we're not planning to do that. We can make sure it doesn't happen by doing what you said: locking those functions to avoid any problems.
-
-Therefore, in conclusion, we must consider your issue as a valid.
-
-Regards,
-Convergence Team
+Worst case scenario, only the last user will be unable to claim their rewards (even though I described above why it is highly unlikely). In the rare situation it happens, it can be fixed by simply sending a few wei to the contract. 
 
 **nevillehuang**
 
-I will keep this as medium as although on first look this could be "admin error", as sponsor mentioned, honest users claiming during killing of a gauge or weight change can result in inaccurate result distribution.
+Imo, just off point 1 alone, this warrants medium severity at the least. The fact that a donation is required to fix this means there is a bug, and is not intended functionality of the function.
 
-# Issue M-4: deposit in bond contract in CvgUtility has no possibility to express slippage control/&expiry 
+**Czar102**
 
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/93 
+I agree that this is a borderline low/med.
+I don't see a reason to discriminate nonzero deposits mod 100. That said, I am siding with the escalation – the loss here is insufficient to consider it a material loss of funds (at no point in the lifetime of the codebase will it surpass $1), and a loss of protocol functionality isn't serious enough if simply sending some dust to the contract will resolve the issue.
 
-## Found by 
-0xGoodess
-## Summary
-deposit in bond contract in CvgUtility has no possibility to express slippage control
+Planning to accept the escalation and consider this a low severity issue.
 
-## Vulnerability Detail
-BondDepository allows depositor to deposit a token in exchange for CVG bond with discount, discount depends on min/max, bond duration as well as totalCvg already minted. The discount is applied on the current price of CVG.
+**CergyK**
 
-However, since both the price of CVG and deposited token are fetched from the oracle in CVGControlTower, they are real-time and dynamic, and the users may receive the final CVG amount different, if the price of CVG, as well as the price of their input token fluctuate.
+@Czar102 please consider report #132 which I submitted which allows to steal an arbitrary amount from the rewards under some conditions, which is a higher impact.
 
-Right now, in both the BondDepository, as well as the integration contract, CvgUtility, does not have any argument for the depositor to express the minCVGReceived. This creates an issue since the user could suffer from price manipulation of CVG/& deposited token.
+My issue shares the same root cause as this one, so I did not escalate for deduplication. However if you think that this issue should be low, maybe it would be more fair to make my issue unique since the impact is sufficient.
 
-Consider:
-1. Alice wants to deposit stETH in exchange for CVG bond. She calls depositBond on CvGUtility with 1 stETH, price of CVG is 0.001 stETH currently.
-2. After some time T, price of CVG becomes 0.002 stETH, the deposit is executed and got Alice 500 CVG instead of 1000, which is the price at the time when Alice requested deposit.
+**nevillehuang**
 
+#132 and this #190 shares the same impact, if this is invalid, #132 should be invalid as well. Namely the following two impact:
 
-```solidity
-    function deposit(uint256 tokenId, uint256 amount, address receiver) external whenNotPaused {
-        ICvgControlTower _cvgControlTower = cvgControlTower;
-        IBondPositionManager bondPositionManager = _cvgControlTower.bondPositionManager();
-        require(amount > 0, "LTE");
-        ICvg _cvg = cvg;
+1. Last user withdrawals can revert
+2. Some users will gain more rewards at the expense of others.
 
-        IBondStruct.BondParams memory _bondParams = bondParams;
+Both examples present used involve relatively low amounts, so I'm unsure what is the exact impact
 
-        uint256 _tokenId;
-        if (tokenId == 0) {
-            _tokenId = bondPositionManager.nextId();
-        } else {
-            address tokenOwner = msg.sender == _cvgControlTower.cvgUtilities() ? receiver : msg.sender;
-            require(bondPositionManager.ownerOf(tokenId) == tokenOwner, "TOKEN_NOT_OWNED");
-            require(bondPositionManager.bondPerTokenId(tokenId) == address(this), "WRONG_BOND_DEPOSITORY");
-            require(bondPositionManager.unlockingTimestampPerToken(tokenId) < block.timestamp, "TOKEN_TIMELOCKED");
-            _tokenId = tokenId;
-        }
-        /// @dev Bond expired after 1/2 days x numberOfPeriods from the creation
-        require(block.timestamp <= startBondTimestamp + _bondParams.bondDuration, "BOND_INACTIVE");
+Comparing this issue attack path
 
-        (uint256 cvgPrice, uint256 assetPrice) = _cvgControlTower.cvgOracle().getAndVerifyTwoPrices(
-            address(_cvg),
-            _bondParams.token
-        );
-```
-## Impact
-depositor may suffer MEV or unexpected discrepenacy during deposit for CVG bond.
-## Code Snippet
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Bond/BondDepository.sol#L139
+> by using increaseLockAmount with small amount values by which the total difference difference b/w the user's calculated balanceOfYsCvgAt and the accounted amount in totalSuppliesTracking can be increased
 
-## Tool used
+and #132
 
-Manual Review
+> -> Alice locks some small amount for lockDuration = 64 so that it increases totalSupply by exactly 1
+> -> Alice proceeds to lock X times using the values:
 
-## Recommendation
-Consider to add minCVGreceived as well as expiry control for the deposit function at Bond Depository and or CvgUtility for deposit.
+Comparing this issue impact
 
+> This breaks the shares accounting of the treasury rewards. Some user's will get more than the actual intended rewards while the last withdrawals will result in a revert
 
+and #132
 
-## Discussion
+> Under specific circumstances (if the attacker is the only one to have allocated to YS during a TDE), an attacker is able to claim arbitrarily more rewards than is due to him, stealing rewards from other participants in the protocol
 
-**shalbe-cvg**
+My opinion is both issues should remain valid medium severity issue based on impact highlighted in both issues.
 
-Hello,
+**CergyK**
 
-Thanks a lot for your attention.
+After some discussion with @nevillehuang, agree that issues should stay duplicated and valid `high/medium` given following reasons:
+- Highest impact is: loss of arbitrary amount of present/future rewards (see #132 for explanation)
+- Necessary condition of very low YS allocation is unlikely but not impossible since YS is not central in Convergence (YS allocation could be empty and the system would be working as expected)
 
-After an in-depth review and even though this contract (BondDepository) is Out of Scope, we have to consider your issue as Confirmed.
-We will implement a check on the minimum amount that should be put into the Bond position depending on the deposited amount and the discount.
+**deadrosesxyz**
 
-Regards,
-Convergence Team
+To summarize: 
+ - Almost certainly in regular conditions, there will be no issue for any user whatsover.
+ - In some rare case, (see original escalation) there could be a small overdistribution of rewards (matter of a few wei). In the rarer case all users claim their rewards, the last unstaker will be unable to do so due to lack of funds. This is even more unlikely considering any time a user claims rewards, the amount they claim is rounded down, (due to built-in round down in solidity) leading to making the overdistribution smaller/inexistent. But even if all the conditions are met, the issue can be fixed by simply sending a few wei to the contract. 
+ - The highest impact described in #132 requires for the total balance to not simply be _very low_ but in fact to be just a few wei. Not only it has to be a few wei, but it has to be a few wei for at least 12 weeks (until TDE payout). It is absolutely unrealistic to have a few wei total balance for 12 weeks. 
+ 
+ Issue should remain Low severity
 
-# Issue M-5: Risk of Permanently Lost Rewards due to Claiming Before Treasury Deposit 
+**10xhash**
 
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/110 
+I agree that the fix of sending minor amounts of all reward tokens won't cost the team any considerable loss financially. But apart from the fix, the impact under reasonable conditions of user not being able to withdraw their rewards is certainly a major one. 
+If issues existing on the contract are judged based on the ease of fixing/preventing, I think a lot more issues would exist under this category. Wouldn't it make almost all functionality breaks in up-gradable contracts low severity due to the fix being an upgrade?     
 
-## Found by 
-0xkaden, HChang26, wangxx2026
-## Summary
-When Treasury Bond `depositMultipleToken()` in current TDE and users try to `claimRewards()` for current TDE, users may lose their rightful rewards.
+**Czar102**
 
-## Vulnerability Detail
-The mechanism responsible for TreasuryBonds depositing rewards into `YsDistributor.sol` through the `depositMultipleToken()` function calculates the TDE for reward distribution based on the current cvgCycle. Each cvgCycle spans a week, and `TDE_DURATION` equals 12 weeks or 12 cvgCycles. This calculation of `_actualTDE` results in two potential outcomes: the current TDE or the subsequent one.
-```solidity
-        uint256 _actualCycle = cvgControlTower.cvgCycle();
-        uint256 _actualTDE = _actualCycle % TDE_DURATION == 0
-            ? _actualCycle / TDE_DURATION
-            : (_actualCycle / TDE_DURATION) + 1;
-```
-The issue arises when users use `claimRewards()` for the current TDE before the execution of `depositMultipleToken()` within the same block. If, coincidentally, the TDE calculation lands on the current TDE and `claimRewards()` is executed first, users risk permanently losing their rewards. Once a specific TDE id is claimed, users are unable to make further claims, effectively trapping their rewards within the `YsDistributor.sol` contract.
-```solidity
-    function claimRewards(uint256 tokenId, uint256 tdeId, address receiver, address operator) external {
-        ICvgControlTower _cvgControlTower = cvgControlTower;
-        ILockingPositionService _lockingPositionService = lockingPositionService;
-        ILockingPositionManager _lockingPositionManager = lockingPositionManager;
-        require(_lockingPositionManager.unlockingTimestampPerToken(tokenId) < block.timestamp, "TOKEN_TIMELOCKED");
+Due to the additional impact noted (thank you @CergyK) I think the loss can be sufficient to warrant a medium severity for this issue (loss of funds, but improbable assumptions are made).
 
-        if (msg.sender != _cvgControlTower.cvgUtilities()) {
-            operator = msg.sender;
-        }
-        require(
-            operator == _lockingPositionManager.ownerOf(tokenId) ||
-                operator == lockingPositionDelegate.delegatedYsCvg(tokenId),
-            "NOT_OWNED_OR_DELEGATEE"
-        );
+**Czar102**
 
-      ->uint256 cycleClaimed = tdeId * TDE_DURATION;
+Result:
+Medium
+Has duplicates
 
-        require(_lockingPositionService.lockingPositions(tokenId).lastEndCycle >= cycleClaimed, "LOCK_OVER");
 
-      ->require(_cvgControlTower.cvgCycle() >= cycleClaimed, "NOT_AVAILABLE");
+**sherlock-admin2**
 
-      ->require(!rewardsClaimedForToken[tokenId][tdeId], "ALREADY_CLAIMED");
+Escalations have been resolved successfully!
 
-         and the totalSupply of ysCvg at the specified TDE. */
-        uint256 share = (_lockingPositionService.balanceOfYsCvgAt(tokenId, cycleClaimed) * 10 ** 20) /
-            _lockingPositionService.totalSupplyYsCvgHistories(cycleClaimed);
-
-        require(share != 0, "NO_SHARES");
-
-        _claimTokenRewards(tokenId, tdeId, share, receiver);
-
-        rewardsClaimedForToken[tokenId][tdeId] = true;
-    }
-```
-## Impact
-The rewards are essentially locked in the contract if `claimRewards()` is executed before `depositMultipleToken()` in the same block, resulting in users being unable to claim their rightful rewards.
-
-## Code Snippet
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/YsDistributor.sol#L101
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/YsDistributor.sol#L155
-## Tool used
-
-Manual Review
-
-## Recommendation
-```solidity
-    function claimRewards(uint256 tokenId, uint256 tdeId, address receiver, address operator) external {
-        ICvgControlTower _cvgControlTower = cvgControlTower;
-        ILockingPositionService _lockingPositionService = lockingPositionService;
-        ILockingPositionManager _lockingPositionManager = lockingPositionManager;
-        require(_lockingPositionManager.unlockingTimestampPerToken(tokenId) < block.timestamp, "TOKEN_TIMELOCKED");
-
-        if (msg.sender != _cvgControlTower.cvgUtilities()) {
-            operator = msg.sender;
-        }
-        require(
-            operator == _lockingPositionManager.ownerOf(tokenId) ||
-                operator == lockingPositionDelegate.delegatedYsCvg(tokenId),
-            "NOT_OWNED_OR_DELEGATEE"
-        );
-
-        uint256 cycleClaimed = tdeId * TDE_DURATION;
-
-        require(_lockingPositionService.lockingPositions(tokenId).lastEndCycle >= cycleClaimed, "LOCK_OVER");
-
--       require(_cvgControlTower.cvgCycle() >= cycleClaimed, "NOT_AVAILABLE");
-+       require(_cvgControlTower.cvgCycle() > cycleClaimed, "NOT_AVAILABLE");
-
-        require(!rewardsClaimedForToken[tokenId][tdeId], "ALREADY_CLAIMED");
-
-         and the totalSupply of ysCvg at the specified TDE. */
-        uint256 share = (_lockingPositionService.balanceOfYsCvgAt(tokenId, cycleClaimed) * 10 ** 20) /
-            _lockingPositionService.totalSupplyYsCvgHistories(cycleClaimed);
-
-        require(share != 0, "NO_SHARES");
-
-        _claimTokenRewards(tokenId, tdeId, share, receiver);
-
-        rewardsClaimedForToken[tokenId][tdeId] = true;
-    }
-```
-
-
-
-## Discussion
-
-**0xR3vert**
-
-Hello,
-
-Thanks a lot for your attention.
-
-That's a good catch. In reality, the claim is not designed to be used during a TDE cycle, but only afterwards. This allows a user to receive their rewards for the last TDE cycle. This oversight on our part is something we are grateful for you pointing out.
-
-In conclusion, we must acknowledge your issue as valid.
-
-Regards,
-Convergence Team
-
-# Issue M-6: GaugeController: `change_gauge_weight()` can be frontrun to improperly increase or decrease gauge weight 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/122 
-
-## Found by 
-0xDetermination, ZanyBonzy, bughuntoor
-## Summary
-`change_gauge_weight()` can be easily frontrun to alter the expected result of the function call.
-## Vulnerability Detail
-Notice how weight is set by `change_gauge_weight()`:
-```vyper
-def _change_gauge_weight(addr: address, weight: uint256):
-    ...
-    self.points_weight[addr][next_time].bias = weight
-    ...
-```
-Because the weight is directly set to the desired weight, the function can be frontrun to improperly increase the gauge weight. Let's see an example:
-1. Admin submits a transaction to change a gauge's weight to some value X.
-2. User who has an active vote for that gauge is contributing some nonzero value Y to the gauge's bias.
-3. User frontruns the admin's transaction and votes zero for the gauge.
-4. After waiting for `WEIGHT_VOTE_DELAY` (10 days), the user votes for that gauge again, increasing the gauge's bias by Y (approximately).
-5. The admin expected the gauge's weight to be X, but it is instead X + Y.
-
-In the above example, the user is effectively granted extra voting power. It's unlikely for the admin to detect that this exploit has occurred, since no suspicious actions were taken (voting is a normal interaction).
-## Impact
-Too many or too little rewards may be distributed. In the case of too many rewards distributed, the protocol loses funds.
-## Code Snippet
-https://github.com/sherlock-audit/2023-11-convergence/blob/e894be3e36614a385cf409dc7e278d5b8f16d6f2/sherlock-cvg/contracts/Locking/GaugeController.vy#L578
-
-https://github.com/sherlock-audit/2023-11-convergence/blob/e894be3e36614a385cf409dc7e278d5b8f16d6f2/sherlock-cvg/contracts/Locking/GaugeController.vy#L16
-## Tool used
-
-Manual Review
-
-## Recommendation
-Consider modifying the function to increase/decrease the weight as desired instead of directly setting it:
-```diff
--def _change_gauge_weight(addr: address, weight: uint256):
-+def _change_gauge_weight(addr: address, weight: int256):
-    ...
--    self.points_weight[addr][next_time].bias = weight
-+    self.points_weight[addr][next_time].bias += weight
-    ...
-```
-
-
-
-## Discussion
-
-**0xR3vert**
-
-Hello,
-
-Thanks a lot for your attention.
-
-Thank you for your insightful observation. Upon thorough examination, we acknowledge that such an occurrence could indeed jeopardize the protocol. We are currently exploring multiple solutions to address this issue.
-We are considering removing the function change_gauge_weight entirely and not distributing CVG inflation on killed gauges, similar to how Curve Protocol handles their gauges.
-
-Therefore, in conclusion, we must consider your issue as valid.
-
-Regards,
-Convergence Team
-
-# Issue M-7: LockPositionService::increaseLockTime Incorrect Calculation Extends Lock Duration Beyond Intended Period 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/136 
-
-## Found by 
-cergyk, jah, rvierdiiev
-## Summary
-`LockPositionService::increaseLockTime` uses `block.timestamp` for locking tokens, resulting in potential over-extension of the lock period. Specifically, if a user locks tokens near the end of a cycle, the lock duration might extend an additional week more than intended. For instance, locking for one cycle at the end of cycle N could result in an unlock time at the end of cycle N+2, instead of at the start of cycle N+2.
-
-This means that all the while specifying that their $CVG should be locked for the next cycle, the $CVG stays locked for two cycles.
-
-## Vulnerability Detail
-The function `increaseLockTime` inaccurately calculates the lock duration by using `block.timestamp`, thus not aligned to the starts of cycles. This discrepancy leads to a longer-than-expected lock period, especially when a lock is initiated near the end of a cycle. This misalignment means that users are unintentionally extending their lock period and affecting their asset management strategies.
-
-### Scenario:
-- Alice decides to lock her tokens for one cycle near the end of cycle N.
-- The lock duration calculation extends the lock to the end of cycle N+2, rather than starting the unlock process at the start of cycle N+2.
-- Alice's tokens are locked for an additional week beyond her expectation.
-
-## Impact
-
-## Code Snippet
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionService.sol#L421
-
-## Tool used
-Users may have their $CVG locked for a week more than expected
-
-## Recommendation
-Align the locking mechanism to multiples of a week and use `(block.timestamp % WEEK) + lockDuration` for the lock time calculation. This adjustment ensures that the lock duration is consistent with user expectations and cycle durations.
-
-# Issue M-8: When cvgCycle is incremented shortly after or at thursday midnight of TDE there is a possibility to mint big amount of veCVG and burn them shortly after 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/158 
-
-## Found by 
-vvv
-## Summary
-When cvgCycle is incremented shortly after or right at thursday midnight of TDE there is a possibility to mint big amount of veCVG and burn them shortly after. Unlock time of veCVG is alsways set as the next thursday midnight of mint. When we mint veCVG in LockingPositionService.mintPosition with durationAdd == 0 shortly before the thursday midnight we can generate a big amount of veCVG and burn them when cvgCycle in incremented. 
-
-## Vulnerability Detail
-
-The unlock time of minted veCVG is always set as the next thursday midnight in `create_lock` in `veCVG.py`
-
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L328
-
-We are able to call `LockingPositionService.mintPosition` function with `lockDuration == 0` if the current `cvgCycle % TDE_DURATION == 0`, although we won't mint any ysCVG or mgCVG we will be able to mint `amount` of veCVG with such parameters. 
-
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionService.sol#L252
-
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionService.sol#L270-L273
-
-If `cvgCycle` is incremented shortly after or right at the thursday midnight we will be able to burn previously minted veCVG right at the moment of the increment. At the midnight the `unlock_time` of veCVG will be valid for burn and after the increment the current cycle will be more than `endLockCycle`, thus allowing to `burnPosition`.
-
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L404
-
-https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/LockingPositionService.sol#L518
-
-
-## Impact
-
-With such possibility we could perform a flash loan attack to generate a big amounts of veCVG in a short time. Having a big amount of veCVG could be used to maliciously affect protocol voting.
-
-## Code Snippet
-
-```solidity
-mintPosition(0, <big amount of CVG from a flashloan>, 100, msg.sender, true) // shortly before the thursday midnight of TDE
-<doing something malicious with the obtrained veCVG>
-burnPosition(tokenId) // right after the increment of cvgCycle
-```
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-
-To disallow minting of veCVG without appopriate locking time we could add checks for `lastEndCycle > actualCycle` as in `LockingPositionService.increaseLockAmount` in other locking methods: `increaseLockTime` and `increaseLockTimeAndAmount`. Similary we should add check for `lockDuration > 0` in `LockingPositionService.mintPosition`.
-
-
-
-## Discussion
-
-**shalbe-cvg**
-
-Hello,
-
-Thanks a lot for your attention.
-
-After an in-depth review, we have to consider your issue as Confirmed.
-The locking duration should never be set to 0 cycle. As this doesn't make sense, we will add a new check preventing malicious users to create or increase the lock time of a position with a duration of 0.
-
-Regards,
-Convergence Team
-
-# Issue M-9: cvgControlTower and veCVG lock timing will be different and lead to yield loss scenarios 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/178 
-
-## Found by 
-0x52, 0xAlix2, cergyk
-## Summary
-
-When creating a locked CVG position, there are two more or less independent locks that are created. The first is in lockingPositionService and the other is in veCVG. LockingPositionService operates on cycles (which are not finite length) while veCVG always rounds down to the absolute nearest week. The disparity between these two accounting mechanism leads to conflicting scenario that the lock on LockingPositionService can be expired while the lock on veCVG isn't (and vice versa). Additionally tokens with expired locks on LockingPositionService cannot be extended. The result is that the token is expired but can't be withdrawn. The result of this is that the expired token must wait to be unstaked and then restaked, cause loss of user yield and voting power while the token is DOS'd.
-
-## Vulnerability Detail
-
-Cycles operate using block.timestamp when setting lastUpdateTime on the new cycle in [L345](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L345). It also requires that at least 7 days has passed since this update to roll the cycle forward in [L205](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L205). The result is that the cycle can never be exactly 7 days long and the start/end of the cycle will constantly fluctuate. 
-
-Meanwhile when veCVG is calculating the unlock time it uses the week rounded down as shown in [L328](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L328). 
-
-We can demonstrate with an example:
-
-Assume the first CVG cycle is started at block.timestamp == 1,000,000. This means our first cycle ends at 1,604,800. A user deposits for a single cycle at 1,400,000. A lock is created for cycle 2 which will unlock at 2,209,600. 
-
-The lock on veCVG does not match this though. Instead it's calculation will yield:
-
-    (1,400,000 + 2 * 604,800) / 604,800 = 4
-
-    4 * 604,800 = 2,419,200
-
-As seen these are mismatched and the token won't be withdrawable until much after it should be due to the check in veCVG [L404](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L404).
-
-This DOS will prevent the expired lock from being unstaked and restaked which causes loss of yield.
-
-The opposite issue can also occur. For each cycle that is slightly longer than expected the veCVG lock will become further and further behind the cycle lock on lockingPositionService. This can also cause a dos and yield loss because it could prevent user from extending valid locks due to the checks in [L367](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L367) of veCVG.
-
-An example of this:
-
-Assume a user locks for 96 weeks (58,060,800). Over the course of that year, it takes an average of 2 hours between the end of each cycle and when the cycle is rolled over. This effectively extends our cycle time from 604,800 to 612,000 (+7200). Now after 95 cycles, the user attempts to increase their lock duration. veCVG and lockingPositionService will now be completely out of sync:
-
-After 95 cycles the current time would be:
-
-    612,000 * 95 = 58,140,000
-
-Whereas veCVG lock ended:
-
-    612,000 * 96 = 58,060,800
-
-According to veCVG the position was unlocked at 58,060,800 and therefore increasing the lock time will revert due to [L367](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Locking/veCVG.vy#L367)
-
-The result is another DOS that will cause the user loss of yield. During this time the user would also be excluded from taking place in any votes since their veCVG lock is expired.
-
-## Impact
-
-Unlock DOS that cause loss of yield to the user
-
-## Code Snippet
-
-[CvgRewards.sol#L341-L349](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Rewards/CvgRewards.sol#L341-L349)
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-
-I would recommend against using block.timestamp for CVG cycles, instead using an absolute measurement like veCVG uses.
-
-# Issue M-10: SdtRewardReceiver#_withdrawRewards has incorrect slippage protection and withdraws can be sandwiched 
-
-Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/180 
-
-## Found by 
-0x52, 0xkaden, Bauer, CL001, FarmerRick, caventa, cducrest-brainbot, detectiveking, hash, lemonmon, r0ck3tz
-## Summary
-
-The _min_dy parameter of poolCvgSDT.exchange is set via the poolCvgSDT.get_dy method. The problem with this is that get_dy is a relative output that is executed at runtime. This means that no matter the state of the pool, this slippage check will never work.
-
-## Vulnerability Detail
-
-[SdtRewardReceiver.sol#L229-L236](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Staking/StakeDAO/SdtRewardReceiver.sol#L229-L236)
-
-            if (isMint) {
-                /// @dev Mint cvgSdt 1:1 via CvgToke contract
-                cvgSdt.mint(receiver, rewardAmount);
-            } else {
-                ICrvPoolPlain _poolCvgSDT = poolCvgSDT;
-                /// @dev Only swap if the returned amount in CvgSdt is gretear than the amount rewarded in SDT
-                _poolCvgSDT.exchange(0, 1, rewardAmount, _poolCvgSDT.get_dy(0, 1, rewardAmount), receiver);
-            }
-
-When swapping from SDT to cvgSDT, get_dy is used to set _min_dy inside exchange. The issue is that get_dy is the CURRENT amount that would be received when swapping as shown below:
-
-    @view
-    @external
-    def get_dy(i: int128, j: int128, dx: uint256) -> uint256:
-        """
-        @notice Calculate the current output dy given input dx
-        @dev Index values can be found via the `coins` public getter method
-        @param i Index value for the coin to send
-        @param j Index valie of the coin to recieve
-        @param dx Amount of `i` being exchanged
-        @return Amount of `j` predicted
-        """
-        rates: uint256[N_COINS] = self.rate_multipliers
-        xp: uint256[N_COINS] = self._xp_mem(rates, self.balances)
-    
-        x: uint256 = xp[i] + (dx * rates[i] / PRECISION)
-        y: uint256 = self.get_y(i, j, x, xp, 0, 0)
-        dy: uint256 = xp[j] - y - 1
-        fee: uint256 = self.fee * dy / FEE_DENOMINATOR
-        return (dy - fee) * PRECISION / rates[j]
-
-The return value is EXACTLY the result of a regular swap, which is where the problem is. There is no way that the exchange call can ever revert. Assume the user is swapping because the current exchange ratio is 1:1.5. Now assume their withdraw is sandwich attacked. The ratio is change to 1:0.5 which is much lower than expected. When get_dy is called it will simulate the swap and return a ratio of 1:0.5. This in turn doesn't protect the user at all and their swap will execute at the poor price.
-
-## Impact
-
-SDT rewards will be sandwiched and can lose the entire balance
-
-## Code Snippet
-
-[SdtRewardReceiver.sol#L213-L245](https://github.com/sherlock-audit/2023-11-convergence/blob/main/sherlock-cvg/contracts/Staking/StakeDAO/SdtRewardReceiver.sol#L213-L245)
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-
-Allow the user to set _min_dy directly so they can guarantee they get the amount they want
-
-
-
-## Discussion
-
-**shalbe-cvg**
-
-Hello,
-
-Thanks a lot for your attention.
-
-After an in-depth review, we have to consider your issue as Confirmed.
-Not only users can get sandwiched but in most cases this exchange directly on the pool level would rarely succeed as `get_dy` returns the exact amount the user could get. We will add a slippage that users will setup.
-
-Regards,
-Convergence Team
+Escalation status:
+- [deadrosesxyz](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/190/#issuecomment-1868546666): accepted
 
