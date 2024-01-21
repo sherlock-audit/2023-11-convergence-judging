@@ -158,6 +158,18 @@ Escalations have been resolved successfully!
 Escalation status:
 - [CergyK](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/94/#issuecomment-1869547286): rejected
 
+**walk-on-me**
+
+Hello, we fixed this issue on this PR.
+
+You can see on these comments, description of the fix : 
+- https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457713428
+- https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457714042
+
+**IAm0x52**
+
+Fix looks good. _change_gauge_weight has been removed completely
+
 # Issue H-2: LockingPositionDelegate::manageOwnedAndDelegated unchecked duplicate tokenId allow metaGovernance manipulation 
 
 Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/126 
@@ -281,6 +293,24 @@ We will add a check on the values contained in the 3 arrays to ensure duplicates
 Regards,
 Convergence Team
 
+**walk-on-me**
+
+Hello dear auditor, 
+
+We performed the correction of this issue.
+
+We used the trick you give us to check the duplicates in the arrays of token ID.
+
+You can find the correction here : 
+
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457545377
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457546051
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457546527
+
+**IAm0x52**
+
+Fix looks good. Arrays that have duplicates or that aren't ordered will cause the function to revert
+
 # Issue H-3: Tokens that are both bribes and StakeDao gauge rewards will cause loss of funds 
 
 Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/182 
@@ -400,6 +430,19 @@ Therefore, in conclusion, we must consider your issue as a valid.
 
 Regards,
 Convergence Team
+
+**walk-on-me**
+
+This issue has been solved here :
+
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4
+
+Follow the comment :
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457470558
+
+**IAm0x52**
+
+Fix looks good. Now uses a sum instead of a set
 
 # Issue M-1: Division by Zero in CvgRewards::_distributeCvgRewards leads to locked funds 
 
@@ -544,6 +587,20 @@ Escalations have been resolved successfully!
 Escalation status:
 - [CergyK](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/131/#issuecomment-1869562974): accepted
 
+**walk-on-me**
+
+Hello dear auditor,
+
+we fixed this issue.
+
+You can find how on the following link : 
+
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457528119
+
+**IAm0x52**
+
+Fix looks good. Now utilizes a ternary operator to prevent division by zero
+
 # Issue M-2: LockPositionService::increaseLockTime Incorrect Calculation Extends Lock Duration Beyond Intended Period 
 
 Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/136 
@@ -573,6 +630,37 @@ Users may have their $CVG locked for a week more than expected
 
 ## Recommendation
 Align the locking mechanism to multiples of a week and use `(block.timestamp % WEEK) + lockDuration` for the lock time calculation. This adjustment ensures that the lock duration is consistent with user expectations and cycle durations.
+
+
+
+## Discussion
+
+**walk-on-me**
+
+Hello dear judge,
+
+this issue has been solved.
+
+In order to solve it, we decided that when a user comes for locking or increase it's lock, we'll not take anymore the one in the CvgControlTower.
+If an user decide to performs a lock action between the timestamp where the cycle is updated and the CVG distribution ( by the CvgRewards ). He'll just lock for the next week, having no incidence on protocol.
+
+Remarks :
+We are keeping the cvgCycle of the CvgControlTower for :
+
+Burning the NFT
+Claim the rewards of the Ys
+You can check how by following the comments done here :
+
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457499501
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457504596
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457504988
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457505267
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457508720
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457510511
+
+**IAm0x52**
+
+Fix looks good. Cycles are now aligned based on computed week rather than cvgControlTower 
 
 # Issue M-3: Delegation Limitation in Voting Power Management 
 
@@ -863,6 +951,37 @@ Manual Review
 
 I would recommend against using block.timestamp for CVG cycles, instead using an absolute measurement like veCVG uses.
 
+
+
+## Discussion
+
+**walk-on-me**
+
+Hello dear judge, 
+
+this issue has been solved.
+
+In order to solve it, we decided that when a user comes for locking or increase it's lock, we'll not take anymore the one in the `CvgControlTower`.
+If an user decide to performs a lock action between the timestamp where the cycle is updated and the CVG distribution ( by the `CvgRewards` ). He'll just lock for the next week, having no incidence on protocol.
+
+Remarks : 
+We are keeping the `cvgCycle` of the `CvgControlTower` for : 
+- Burning the NFT
+- Claim the rewards of the Ys
+
+You can check how by following the comments done here : 
+
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457499501
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457504596
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457504988
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457505267
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457508720
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457510511
+
+**IAm0x52**
+
+Fix looks good. All cycles are now aligned by a computed weekly timestamp instead of using cvgControlTower
+
 # Issue M-5: SdtRewardReceiver#_withdrawRewards has incorrect slippage protection and withdraws can be sandwiched 
 
 Source: https://github.com/sherlock-audit/2023-11-convergence-judging/issues/180 
@@ -941,6 +1060,20 @@ Not only users can get sandwiched but in most cases this exchange directly on th
 
 Regards,
 Convergence Team
+
+**walk-on-me**
+
+This issue has been solved here :
+
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4
+
+Follow the comment :
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457486906
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457489632
+
+**IAm0x52**
+
+Fix looks good. User can now specify a min out parameter
 
 # Issue M-6: Division difference can result in a revert when claiming treasury yield and excess rewards to some users 
 
@@ -1150,4 +1283,20 @@ Escalations have been resolved successfully!
 
 Escalation status:
 - [deadrosesxyz](https://github.com/sherlock-audit/2023-11-convergence-judging/issues/190/#issuecomment-1868546666): accepted
+
+**walk-on-me**
+
+This issue has been solved here :  
+
+https://github.com/Cvg-Finance/sherlock-cvg/pull/4
+
+Follow the comments : 
+- https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457453181
+- https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457453459
+- https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457453906
+- https://github.com/Cvg-Finance/sherlock-cvg/pull/4#discussion_r1457455387
+
+**IAm0x52**
+
+Fix looks good. Order of operations has been updated to consistently reflect the proper value
 
